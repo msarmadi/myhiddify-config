@@ -1,0 +1,59 @@
+name: ci
+
+on:
+  # push:
+  #   branches: [ "main" ]
+  workflow_dispatch:
+    branches: [ "main" ]
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      version-tag: v1.9.1-4
+    steps:
+    - uses: actions-ecosystem/action-regex-match@v2
+      id: regex-match
+      with:
+        text: ${{ github.ref_name }}
+        regex: '^v[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9-]+)?$'
+    - name: Print setup
+      run: |
+        echo version-tag=v1.9.1-4
+        echo github.ref=${{ github.ref }}
+        echo github.ref_name=${{ github.ref_name }}
+        echo github.ref_type=${{ github.ref_type }}
+        echo release-ref=${{ steps.regex-match.outputs.match }}
+
+
+  publish-dockerhub:
+#    needs: [setup, snyk]
+    needs: [setup]
+    environment: CICD
+    env: 
+      RELEASE_TAG: v1.9.1-4
+    runs-on: ubuntu-latest
+#    if: ${{ ( github.ref_type == 'tag' ) && ( needs.setup.outputs.version-tag != '') }}
+    steps:
+    - uses: actions/checkout@v3
+    - run: echo "publishing the release version msarmadi/hiddify-config:${RELEASE_TAG}"
+    - name: Dockerhub login
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKERHUB_USER }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+        logout: true
+    - run: echo "DOCKERHUB LOGIN SUCCESSFUL"
+    - name: Build and push image
+      run:  |
+            docker context create buildx-build
+            docker buildx create --use buildx-build
+            docker buildx build \
+              --platform=linux/amd64,linux/arm64 \
+              -t msarmadi/hiddify-config:${RELEASE_TAG} \
+              -t msarmadi/hiddify-config:latest \
+              --build-arg VERSION=${RELEASE_TAG} \
+              --push \
+              .
+    - run: echo "DOCKERHUB PUBLISH SUCCESSFUL"
+    
